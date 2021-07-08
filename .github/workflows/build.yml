@@ -11,8 +11,21 @@ jobs:
       run: sudo apt install node-typescript
     - name: Make
       run: make
-    - name: Upload artifact
-      uses: actions/upload-artifact@master
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        name: tv-osc
-        path: tv-osc.js
+        tag_name: ci-${{ github.sha }}
+        release_name: CI build
+    - name: Upload Release Asset
+      id: upload-release-asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: tv-osc.js
+        asset_name: tv-osc.js
+        asset_content_type: application/octet-stream
