@@ -4,12 +4,9 @@ declare const mp: any;
 // - Chapter skip
 // - Show progress on pause: mp.observe_property('pause', 'bool', ...);
 // - Audio normalization
-// - Sub scale
-// - Audio & sub delay adjust
-// - Sub pos
 // - Anime4K shader selection
 // - Mono sound
-// - Saveable and loadable audio/sub id, audio/sub delay, and shader selection
+// - Saveable and loadable audio/sub id, audio/sub delay, and shader selection, with option to autoload
 
 // ASS specs: http://www.tcax.org/docs/ass-specs.htm
 
@@ -25,6 +22,7 @@ interface Track {
 	type: string
 }
 
+const clamp = (n: number, min: number, max: number) => n < min ? min : (n > max ? max : n);
 const padTwoZero = (s: string) => s.length === 1 ? ('0' + s) : s;
 const hexify = (n: number) => padTwoZero((n).toString(16));
 const hhmmss = (s: number, forceH?: boolean) => {
@@ -134,11 +132,11 @@ class TitleProgress {
 	}
 	update() {
 		const title = mp.get_property('media-title');
-		const pos = mp.get_property('time-pos');
-		const duration = mp.get_property('duration');
+		const pos = mp.get_property_number('time-pos');
+		const duration = mp.get_property_number('duration');
 		const posStr = hhmmss(pos, duration >= 3600);
 		const durationStr = hhmmss(duration);
-		const posPercent = Math.round(mp.get_property('percent-pos') * 100) / 100;
+		const posPercent = Math.round(mp.get_property_number('percent-pos') * 100) / 100;
 		this.osd.data = `{\\an8}{\\fs32}${title}\n{\\an8}{\\fs24}${posStr}/${durationStr} - ${posPercent}%`;
 		this.osd.update();
 	}
@@ -172,13 +170,13 @@ class Overlay {
 	titleProgress = new TitleProgress()
 	menu = new SimpleAssMenu([
 		{
-			title: 'Select Audio',
+			title: 'Audio Track',
 			value: () => trackStr('audio'),
 			// pressHandler: () => {}, // TODO: show selection menu
 			lrHandler: (_it, left) => cycleTrack('audio', left ? -1 : 1),
 		},
 		{
-			title: 'Select Subtitle',
+			title: 'Subtitle Track',
 			value: () => trackStr('sub'),
 			// pressHandler: () => {}, // TODO: show selection menu
 			lrHandler: (_it, left) => cycleTrack('sub', left ? -1 : 1),
@@ -190,6 +188,38 @@ class Overlay {
 					mp.get_property('fullscreen') === 'yes' ? 'no' : 'yes'),
 			lrHandler: it => {
 				it.pressHandler(it);
+			},
+		},
+		{
+			title: 'Audio Delay',
+			value: () => Math.round(mp.get_property('audio-delay') * 1000) + 'ms',
+			pressHandler: () => mp.set_property('audio-delay', 0),
+			lrHandler: (_it, left) => mp.set_property('audio-delay',
+					mp.get_property_number('audio-delay') + (left ? -0.025 : 0.025)),
+		},
+		{
+			title: 'Subtitle Delay',
+			value: () => Math.round(mp.get_property('sub-delay') * 1000) + 'ms',
+			pressHandler: () => mp.set_property('sub-delay', 0),
+			lrHandler: (_it, left) => mp.set_property('sub-delay',
+					mp.get_property_number('sub-delay') + (left ? -0.025 : 0.025)),
+		},
+		{
+			title: 'Subtitle Scale',
+			value: () => Math.round(mp.get_property('sub-scale') * 100) / 100,
+			pressHandler: () => mp.set_property('sub-scale', 1),
+			lrHandler: (_it, left) => {
+				const newVal = mp.get_property_number('sub-scale') + (left ? -0.05 : 0.05);
+				mp.set_property('sub-scale', clamp(newVal, 0.05, 5));
+			},
+		},
+		{
+			title: 'Subtitle Position',
+			value: () => mp.get_property('sub-pos'),
+			pressHandler: () => mp.set_property('sub-pos', 100),
+			lrHandler: (_it, left) => {
+				const newVal = mp.get_property_number('sub-pos') + (left ? -5 : 5);
+				mp.set_property('sub-pos', clamp(newVal, 0, 150));
 			},
 		},
 		{
@@ -227,10 +257,11 @@ mp.add_key_binding('alt+u', 'toggle-tv-osc', () => {
 	} else {
 		overlay = new Overlay();
 		mp.add_forced_key_binding('enter', 'tv-osc-enter', () => overlay.menuKey(Keys.Enter));
-		mp.add_forced_key_binding('up', 'tv-osc-up', () => overlay.menuKey(Keys.Up));
-		mp.add_forced_key_binding('down', 'tv-osc-down', () => overlay.menuKey(Keys.Down));
-		mp.add_forced_key_binding('left', 'tv-osc-left', () => overlay.menuKey(Keys.Left));
-		mp.add_forced_key_binding('right', 'tv-osc-right', () => overlay.menuKey(Keys.Right));
+		const flags = {repeatable: true};
+		mp.add_forced_key_binding('up', 'tv-osc-up', () => overlay.menuKey(Keys.Up), flags);
+		mp.add_forced_key_binding('down', 'tv-osc-down', () => overlay.menuKey(Keys.Down), flags);
+		mp.add_forced_key_binding('left', 'tv-osc-left', () => overlay.menuKey(Keys.Left), flags);
+		mp.add_forced_key_binding('right', 'tv-osc-right', () => overlay.menuKey(Keys.Right), flags);
 	}
 });
 
