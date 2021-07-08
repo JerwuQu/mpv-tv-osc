@@ -3,13 +3,13 @@ declare const mp: any;
 // TODO:
 // - Chapter skip
 // - Show progress on pause: mp.observe_property('pause', 'bool', ...);
-// - Anime4K shader selection
 // - Audio normalization
 // - Sub scale
 // - Audio & sub delay adjust
 // - Sub pos
+// - Anime4K shader selection
 // - Mono sound
-// - Saveable and loadable audio/sub selection and delay
+// - Saveable and loadable audio/sub id, audio/sub delay, and shader selection
 
 // ASS specs: http://www.tcax.org/docs/ass-specs.htm
 
