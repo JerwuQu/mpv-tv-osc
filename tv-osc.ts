@@ -2,11 +2,14 @@ declare const mp: any;
 
 // TODO:
 // - Chapter skip
-// - Save progress and quit
-// - Audio & sub delay adjust
-// - Saveable and loadable audio/sub selection and delay
 // - Show progress on pause: mp.observe_property('pause', 'bool', ...);
 // - Anime4K shader selection
+// - Audio normalization
+// - Sub scale
+// - Audio & sub delay adjust
+// - Sub pos
+// - Mono sound
+// - Saveable and loadable audio/sub selection and delay
 
 // ASS specs: http://www.tcax.org/docs/ass-specs.htm
 
@@ -181,13 +184,21 @@ class Overlay {
 			lrHandler: (_it, left) => cycleTrack('sub', left ? -1 : 1),
 		},
 		{
-			title: 'Toggle Fullscreen',
+			title: 'Fullscreen',
 			value: () => mp.get_property('fullscreen'),
 			pressHandler: () => mp.set_property('fullscreen',
 					mp.get_property('fullscreen') === 'yes' ? 'no' : 'yes'),
 			lrHandler: it => {
 				it.pressHandler(it);
 			},
+		},
+		{
+			title: 'Save Position & Quit',
+			pressHandler: () => mp.command('quit-watch-later'),
+		},
+		{
+			title: 'Quit',
+			pressHandler: () => mp.command('quit'),
 		},
 	]);
 
