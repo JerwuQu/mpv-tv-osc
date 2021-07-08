@@ -1,7 +1,6 @@
 declare const mp: any;
 
 // TODO:
-// - Chapter skip
 // - Show progress on pause: mp.observe_property('pause', 'bool', ...);
 // - Audio normalization
 // - Anime4K shader selection
@@ -20,6 +19,11 @@ interface Track {
 	// NOTE: incomplete
 	id: string
 	type: string
+}
+
+interface Chapter {
+	title: string
+	time: number
 }
 
 const clamp = (n: number, min: number, max: number) => n < min ? min : (n > max ? max : n);
@@ -170,6 +174,26 @@ class Overlay {
 	titleProgress = new TitleProgress()
 	menu = new SimpleAssMenu([
 		{
+			title: 'Chapter',
+			value: () => {
+				const chapters: Chapter[] = JSON.parse(mp.get_property('chapter-list'));
+				if (chapters.length > 0) {
+					const chapterI = mp.get_property_number('chapter');
+					return `${chapterI + 1}/${chapters.length}`;
+				} else {
+					return 'N/A';
+				}
+			},
+			lrHandler: (_it, left) => {
+				const chapters: Chapter[] = JSON.parse(mp.get_property('chapter-list'));
+				if (chapters.length > 0) {
+					const chapterI = mp.get_property_number('chapter');
+					const newChapter = clamp(chapterI + (left ? -1 : 1), 0, chapters.length - 1);
+					mp.set_property('chapter', newChapter);
+				}
+			},
+		},
+		{
 			title: 'Audio Track',
 			value: () => trackStr('audio'),
 			// pressHandler: () => {}, // TODO: show selection menu
@@ -236,11 +260,11 @@ class Overlay {
 		this.menu.destroy();
 		this.titleProgress.destroy();
 	}
-	menuKey(key: Keys) {
+	key(key: Keys) {
 		this.menu.key(key);
 	}
-	updateTitleProgress() {
-		this.titleProgress.update();
+	updateChapter() {
+		this.menu.update();
 	}
 }
 
@@ -256,19 +280,16 @@ mp.add_key_binding('alt+u', 'toggle-tv-osc', () => {
 		overlay = null;
 	} else {
 		overlay = new Overlay();
-		mp.add_forced_key_binding('enter', 'tv-osc-enter', () => overlay.menuKey(Keys.Enter));
+		mp.add_forced_key_binding('enter', 'tv-osc-enter', () => overlay.key(Keys.Enter));
 		const flags = {repeatable: true};
-		mp.add_forced_key_binding('up', 'tv-osc-up', () => overlay.menuKey(Keys.Up), flags);
-		mp.add_forced_key_binding('down', 'tv-osc-down', () => overlay.menuKey(Keys.Down), flags);
-		mp.add_forced_key_binding('left', 'tv-osc-left', () => overlay.menuKey(Keys.Left), flags);
-		mp.add_forced_key_binding('right', 'tv-osc-right', () => overlay.menuKey(Keys.Right), flags);
+		mp.add_forced_key_binding('up', 'tv-osc-up', () => overlay.key(Keys.Up), flags);
+		mp.add_forced_key_binding('down', 'tv-osc-down', () => overlay.key(Keys.Down), flags);
+		mp.add_forced_key_binding('left', 'tv-osc-left', () => overlay.key(Keys.Left), flags);
+		mp.add_forced_key_binding('right', 'tv-osc-right', () => overlay.key(Keys.Right), flags);
 	}
 });
 
-const updateTitleProgress = () => {
-	if (overlay) {
-		overlay.updateTitleProgress();
-	}
-};
-mp.observe_property('media-title', 'string', updateTitleProgress);
-mp.observe_property('time-pos', 'number', updateTitleProgress);
+mp.observe_property('media-title', 'string', overlay?.titleProgress.update());
+mp.observe_property('time-pos', 'number', overlay?.titleProgress.update());
+
+mp.observe_property('chapter', 'number', () => overlay?.menu.update());
