@@ -1,7 +1,6 @@
 declare const mp: any;
 
 // TODO:
-// - Back handler: On menu: close menu, otherwise: close mpv
 // - Show progress on pause: mp.observe_property('pause', 'bool', ...);
 // - Audio normalization
 // - Anime4K shader selection
@@ -270,23 +269,40 @@ class Overlay {
 }
 
 let overlay: Overlay = null;
-mp.add_key_binding('alt+u', 'toggle-tv-osc', () => {
+
+const openOverlay = () => {
+	overlay = new Overlay();
+	mp.add_forced_key_binding('enter', 'tv-osc-enter', () => overlay.key(Keys.Enter));
+	const flags = {repeatable: true};
+	mp.add_forced_key_binding('up', 'tv-osc-up', () => overlay.key(Keys.Up), flags);
+	mp.add_forced_key_binding('down', 'tv-osc-down', () => overlay.key(Keys.Down), flags);
+	mp.add_forced_key_binding('left', 'tv-osc-left', () => overlay.key(Keys.Left), flags);
+	mp.add_forced_key_binding('right', 'tv-osc-right', () => overlay.key(Keys.Right), flags);
+};
+
+const closeOverlay = () => {
+	mp.remove_key_binding('tv-osc-enter');
+	mp.remove_key_binding('tv-osc-up');
+	mp.remove_key_binding('tv-osc-down');
+	mp.remove_key_binding('tv-osc-left');
+	mp.remove_key_binding('tv-osc-right');
+	overlay.destroy();
+	overlay = null;
+};
+
+mp.add_key_binding('alt+u', 'tv-osc-toggle', () => {
 	if (overlay) {
-		mp.remove_key_binding('tv-osc-enter');
-		mp.remove_key_binding('tv-osc-up');
-		mp.remove_key_binding('tv-osc-down');
-		mp.remove_key_binding('tv-osc-left');
-		mp.remove_key_binding('tv-osc-right');
-		overlay.destroy();
-		overlay = null;
+		closeOverlay();
 	} else {
-		overlay = new Overlay();
-		mp.add_forced_key_binding('enter', 'tv-osc-enter', () => overlay.key(Keys.Enter));
-		const flags = {repeatable: true};
-		mp.add_forced_key_binding('up', 'tv-osc-up', () => overlay.key(Keys.Up), flags);
-		mp.add_forced_key_binding('down', 'tv-osc-down', () => overlay.key(Keys.Down), flags);
-		mp.add_forced_key_binding('left', 'tv-osc-left', () => overlay.key(Keys.Left), flags);
-		mp.add_forced_key_binding('right', 'tv-osc-right', () => overlay.key(Keys.Right), flags);
+		openOverlay();
+	}
+});
+
+mp.add_key_binding('q', 'tv-osc-back', () => {
+	if (overlay) {
+		closeOverlay();
+	} else {
+		mp.command('quit');
 	}
 });
 
