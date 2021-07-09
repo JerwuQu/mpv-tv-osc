@@ -289,7 +289,6 @@ mp.add_key_binding('alt+u', 'toggle-tv-osc', () => {
 	}
 });
 
-mp.observe_property('media-title', 'string', overlay?.titleProgress.update());
-mp.observe_property('time-pos', 'number', overlay?.titleProgress.update());
-
+mp.observe_property('media-title', 'string', () => overlay?.titleProgress.update());
+mp.observe_property('time-pos', 'number', () => overlay?.titleProgress.update());
 mp.observe_property('chapter', 'number', () => overlay?.menu.update());
