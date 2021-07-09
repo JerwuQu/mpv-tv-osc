@@ -1,6 +1,7 @@
 declare const mp: any;
 
 // TODO:
+// - Back handler: On menu: close menu, otherwise: close mpv
 // - Show progress on pause: mp.observe_property('pause', 'bool', ...);
 // - Audio normalization
 // - Anime4K shader selection
@@ -59,7 +60,7 @@ interface MenuItem {
 	title: string
 	value?: string | number | ((it: MenuItem) => string | number)
 	pressHandler?(it: MenuItem): void
-	lrHandler?(it: MenuItem, left: boolean): void
+	lrHandler?(dir: -1 | 1, it: MenuItem): void
 }
 
 class SimpleAssMenu {
@@ -109,12 +110,12 @@ class SimpleAssMenu {
 				break;
 			case Keys.Left:
 				if (it.lrHandler) {
-					it.lrHandler(it, true);
+					it.lrHandler(-1, it);
 				}
 				break;
 			case Keys.Right:
 				if (it.lrHandler) {
-					it.lrHandler(it, false);
+					it.lrHandler(1, it);
 				}
 				break;
 			case Keys.Enter:
@@ -184,11 +185,11 @@ class Overlay {
 					return 'N/A';
 				}
 			},
-			lrHandler: (_it, left) => {
+			lrHandler: dir => {
 				const chapters: Chapter[] = JSON.parse(mp.get_property('chapter-list'));
 				if (chapters.length > 0) {
 					const chapterI = mp.get_property_number('chapter');
-					const newChapter = clamp(chapterI + (left ? -1 : 1), 0, chapters.length - 1);
+					const newChapter = clamp(chapterI + dir, 0, chapters.length - 1);
 					mp.set_property('chapter', newChapter);
 				}
 			},
@@ -197,20 +198,20 @@ class Overlay {
 			title: 'Audio Track',
 			value: () => trackStr('audio'),
 			// pressHandler: () => {}, // TODO: show selection menu
-			lrHandler: (_it, left) => cycleTrack('audio', left ? -1 : 1),
+			lrHandler: dir => cycleTrack('audio', dir),
 		},
 		{
 			title: 'Subtitle Track',
 			value: () => trackStr('sub'),
 			// pressHandler: () => {}, // TODO: show selection menu
-			lrHandler: (_it, left) => cycleTrack('sub', left ? -1 : 1),
+			lrHandler: dir => cycleTrack('sub', dir),
 		},
 		{
 			title: 'Fullscreen',
 			value: () => mp.get_property('fullscreen'),
 			pressHandler: () => mp.set_property('fullscreen',
 					mp.get_property('fullscreen') === 'yes' ? 'no' : 'yes'),
-			lrHandler: it => {
+			lrHandler: (_dir, it) => {
 				it.pressHandler(it);
 			},
 		},
@@ -218,22 +219,22 @@ class Overlay {
 			title: 'Audio Delay',
 			value: () => Math.round(mp.get_property('audio-delay') * 1000) + 'ms',
 			pressHandler: () => mp.set_property('audio-delay', 0),
-			lrHandler: (_it, left) => mp.set_property('audio-delay',
-					mp.get_property_number('audio-delay') + (left ? -0.025 : 0.025)),
+			lrHandler: dir => mp.set_property('audio-delay',
+					mp.get_property_number('audio-delay') + dir * 0.025),
 		},
 		{
 			title: 'Subtitle Delay',
 			value: () => Math.round(mp.get_property('sub-delay') * 1000) + 'ms',
 			pressHandler: () => mp.set_property('sub-delay', 0),
-			lrHandler: (_it, left) => mp.set_property('sub-delay',
-					mp.get_property_number('sub-delay') + (left ? -0.025 : 0.025)),
+			lrHandler: dir => mp.set_property('sub-delay',
+					mp.get_property_number('sub-delay') + dir * 0.025),
 		},
 		{
 			title: 'Subtitle Scale',
 			value: () => Math.round(mp.get_property('sub-scale') * 100) / 100,
 			pressHandler: () => mp.set_property('sub-scale', 1),
-			lrHandler: (_it, left) => {
-				const newVal = mp.get_property_number('sub-scale') + (left ? -0.05 : 0.05);
+			lrHandler: dir => {
+				const newVal = mp.get_property_number('sub-scale') + dir * 0.05;
 				mp.set_property('sub-scale', clamp(newVal, 0.05, 5));
 			},
 		},
@@ -241,8 +242,8 @@ class Overlay {
 			title: 'Subtitle Position',
 			value: () => mp.get_property('sub-pos'),
 			pressHandler: () => mp.set_property('sub-pos', 100),
-			lrHandler: (_it, left) => {
-				const newVal = mp.get_property_number('sub-pos') + (left ? -5 : 5);
+			lrHandler: dir => {
+				const newVal = mp.get_property_number('sub-pos') + dir * 5;
 				mp.set_property('sub-pos', clamp(newVal, 0, 150));
 			},
 		},
