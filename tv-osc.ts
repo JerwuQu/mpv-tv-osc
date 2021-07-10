@@ -1,11 +1,13 @@
 declare const mp: any;
 
 // TODO:
-// - Show progress on pause: mp.observe_property('pause', 'bool', ...);
-// - Audio normalization
-// - Anime4K shader selection
 // - Mono sound
-// - Saveable and loadable audio/sub id, audio/sub delay, and shader selection, with option to autoload
+// - Prettier menu
+// - Audio normalization
+// - Settings autoload
+// - More flexible settings save/load menu
+// - Anime4K shader selection
+// - Show progress on pause: mp.observe_property('pause', 'bool', ...);
 
 // ASS specs: http://www.tcax.org/docs/ass-specs.htm
 
@@ -149,6 +151,35 @@ class TitleProgress {
 	}
 }
 
+const PROPS_FILE = '~~/tv-osc.settings.json';
+const SAVED_PROPS = [
+	'fullscreen',
+	'audio', 'sub',
+	'audio-delay', 'sub-delay',
+	'sub-scale', 'sub-pos',
+];
+
+const saveProps = () => {
+	const props = SAVED_PROPS.reduce((acc, prop) => {
+		acc[prop] = mp.get_property(prop);
+		return acc;
+	}, {});
+	mp.utils.write_file('file://' + PROPS_FILE, JSON.stringify(props));
+	mp.osd_message('Saved');
+};
+
+const loadProps = () => {
+	try {
+		const props = JSON.parse(mp.utils.read_file(PROPS_FILE));
+		for (let prop in props) {
+			mp.set_property(prop, props[prop]);
+		}
+		mp.osd_message('Loaded');
+	} catch {
+		mp.osd_message('File load failed');
+	}
+};
+
 const trackStr = (type: string) => {
 	const tracks: Track[] = JSON.parse(mp.get_property('track-list'));
 	const title = mp.get_property(`current-tracks/${type}/title`);
@@ -245,6 +276,14 @@ class Overlay {
 				const newVal = mp.get_property_number('sub-pos') + dir * 5;
 				mp.set_property('sub-pos', clamp(newVal, 0, 150));
 			},
+		},
+		{
+			title: 'Save Settings',
+			pressHandler: saveProps,
+		},
+		{
+			title: 'Load Settings',
+			pressHandler: loadProps,
 		},
 		{
 			title: 'Save Position & Quit',
