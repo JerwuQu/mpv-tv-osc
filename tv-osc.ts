@@ -9,28 +9,25 @@ declare const mp: any;
 // - Anime4K shader selection
 // - Show progress on pause: mp.observe_property('pause', 'bool', ...);
 
-// ASS specs: http://www.tcax.org/docs/ass-specs.htm
-
-interface OsdOverlay {
+interface MpvOsdOverlay {
 	data: string
 	update(): void
 	remove(): void
 }
 
-interface Track {
+interface MpvTrack {
 	// NOTE: incomplete
 	id: string
 	type: string
 }
 
-interface Chapter {
+interface MpvChapter {
 	title: string
 	time: number
 }
 
 const clamp = (n: number, min: number, max: number) => n < min ? min : (n > max ? max : n);
 const padTwoZero = (s: string) => s.length === 1 ? ('0' + s) : s;
-const hexify = (n: number) => padTwoZero((n).toString(16));
 const hhmmss = (s: number, forceH?: boolean) => {
 	const h = Math.floor(s / 3600);
 	s %= 3600;
@@ -39,20 +36,13 @@ const hhmmss = (s: number, forceH?: boolean) => {
 	return (h > 0 || forceH ? padTwoZero(h + '') + ':' : '') + padTwoZero(m + '') + ':' + padTwoZero(s + '');
 };
 
-const ass = {
-	create: (str?: string | null): OsdOverlay => {
-		const item = mp.create_osd_overlay('ass-events');
-		if (str) {
-			item.data = str;
-			item.update();
-		}
-		return item;
-	},
-	rgbColor: (r: number, g: number, b: number) =>
-		`{\\c&H${hexify(b) + hexify(g) + hexify(r)}&}`,
-	bgrHexColor: (c: string) => `{\\c&H${c}&}`,
-	rect: (x: number, y: number, w: number, h: number) =>
-		`{\\p1}m ${x} ${y} l ${x + w} ${y} ${x + w} ${y + h} ${x} ${y + h}\\p0}`,
+const createASS = (str?: string | null): MpvOsdOverlay => {
+	const item = mp.create_osd_overlay('ass-events');
+	if (str) {
+		item.data = str;
+		item.update();
+	}
+	return item;
 };
 
 enum Keys { Up, Down, Left, Right, Enter }
@@ -66,12 +56,12 @@ interface MenuItem {
 
 class SimpleAssMenu {
 	items: MenuItem[]
-	osd: OsdOverlay
+	osd: MpvOsdOverlay
 	selectedI: number = 0
 
 	constructor(items: MenuItem[]) {
 		this.items = items;
-		this.osd = ass.create(this.getStr());
+		this.osd = createASS(this.getStr());
 	}
 	destroy() {
 		this.osd.remove();
@@ -131,7 +121,7 @@ class SimpleAssMenu {
 }
 
 class TitleProgress {
-	osd = ass.create(null)
+	osd = createASS(null)
 
 	constructor() {
 		this.update();
@@ -181,7 +171,7 @@ const loadProps = () => {
 };
 
 const trackStr = (type: string) => {
-	const tracks: Track[] = JSON.parse(mp.get_property('track-list'));
+	const tracks: MpvTrack[] = JSON.parse(mp.get_property('track-list'));
 	const title = mp.get_property(`current-tracks/${type}/title`);
 	const lang = mp.get_property(`current-tracks/${type}/lang`);
 	const id = mp.get_property(type);
@@ -193,7 +183,7 @@ const trackStr = (type: string) => {
 	}
 };
 const cycleTrack = (type: string, dir: number) => {
-	const tracks: Track[] = JSON.parse(mp.get_property('track-list'));
+	const tracks: MpvTrack[] = JSON.parse(mp.get_property('track-list'));
 	const count = tracks.filter(t => t.type === type).length;
 	const currentStr = mp.get_property(type);
 	const current = currentStr === 'no' ? 0 : parseInt(currentStr);
@@ -207,7 +197,7 @@ class Overlay {
 		{
 			title: 'Chapter',
 			value: () => {
-				const chapters: Chapter[] = JSON.parse(mp.get_property('chapter-list'));
+				const chapters: MpvChapter[] = JSON.parse(mp.get_property('chapter-list'));
 				if (chapters.length > 0) {
 					const chapterI = mp.get_property_number('chapter');
 					return `${chapterI + 1}/${chapters.length}`;
@@ -216,7 +206,7 @@ class Overlay {
 				}
 			},
 			lrHandler: dir => {
-				const chapters: Chapter[] = JSON.parse(mp.get_property('chapter-list'));
+				const chapters: MpvChapter[] = JSON.parse(mp.get_property('chapter-list'));
 				if (chapters.length > 0) {
 					const chapterI = mp.get_property_number('chapter');
 					const newChapter = clamp(chapterI + dir, 0, chapters.length - 1);
@@ -293,17 +283,14 @@ class Overlay {
 			title: 'Quit',
 			pressHandler: () => mp.command('quit'),
 		},
-	]);
+	])
 
 	destroy() {
-		this.menu.destroy();
 		this.titleProgress.destroy();
+		this.menu.destroy();
 	}
 	key(key: Keys) {
 		this.menu.key(key);
-	}
-	updateChapter() {
-		this.menu.update();
 	}
 }
 
