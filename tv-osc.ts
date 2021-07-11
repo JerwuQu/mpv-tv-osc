@@ -1,7 +1,6 @@
 declare const mp: any;
 
 // TODO:
-// - Prettier menu
 // - Audio normalization
 // - Settings autoload
 // - More flexible settings save/load menu
@@ -28,14 +27,7 @@ namespace mpv {
 		time: number
 	}
 
-	export const createASS = (str?: string | null): OsdOverlay => {
-		const item = mp.create_osd_overlay('ass-events');
-		if (str) {
-			item.data = str;
-			item.update();
-		}
-		return item;
-	};
+	export const createASS = (): OsdOverlay => mp.create_osd_overlay('ass-events');
 }
 
 const util = {
@@ -49,6 +41,13 @@ const util = {
 		return (h > 0 || forceH ? util.padTwoZero(h + '') + ':' : '')
 				+ util.padTwoZero(m + '') + ':' + util.padTwoZero(s + '');
 	},
+	repeat(s: string, n: number): string {
+		let str = '';
+		while (n--) {
+			str += s;
+		}
+		return str;
+	},
 };
 
 interface MenuItem {
@@ -58,24 +57,29 @@ interface MenuItem {
 	lrHandler?(dir: -1 | 1, it: MenuItem): void
 }
 
-class SimpleAssMenu {
-	items: MenuItem[]
-	osd: mpv.OsdOverlay
-	selectedI: number = 0
+type MenuItemish = MenuItem | 'separator';
 
-	constructor(items: MenuItem[]) {
-		this.items = items;
-		this.osd = mpv.createASS(this.getStr());
+class SimpleAssMenu {
+	items: [number, MenuItem][]
+	osd = mpv.createASS()
+	selectedI = 0
+
+	constructor(items: MenuItemish[]) {
+		this.items = [];
+		let seps = 0;
+		for (let it of items) {
+			if (it === 'separator') {
+				seps++;
+			} else {
+				this.items.push([seps, it]);
+				seps = 0;
+			}
+		}
+		this.update();
 	}
-	destroy() {
-		this.osd.remove();
-	}
+	destroy = () => this.osd.remove();
 	update() {
-		this.osd.data = this.getStr();
-		this.osd.update();
-	}
-	getStr() {
-		return '\\N\\N\\N' + this.items.map((it, i) => {
+		this.osd.data = '\\N\\N\\N' + this.items.map(([seps, it], i) => {
 			let str = it.title;
 			if (it.value !== undefined) {
 				if (typeof it.value === 'function') {
@@ -90,18 +94,20 @@ class SimpleAssMenu {
 			if (it.lrHandler) {
 				str = '[<] ' + str + ' [>]';
 			}
-			return '{\\an7}{\\fs22}{\\bord1}' + (this.selectedI === i ? '{\\b1}' : '') + str;
+			return util.repeat('{\\an7}{\\fs16}\\N', seps) + '{\\an7}{\\fs22}{\\bord1}'
+					+ (this.selectedI === i ? '{\\b1}' : '') + str;
 		}).join('\n');
+		this.osd.update();
 	}
 	key(key: Keys) {
 		if (this.items.length > 0) {
-			const it = this.items[this.selectedI];
+			const it = this.items[this.selectedI][1];
 			switch (key) {
 			case Keys.Up:
 				this.selectedI = (this.selectedI + this.items.length - 1) % this.items.length;
 				break;
 			case Keys.Down:
-				this.selectedI = (this.selectedI + this.items.length + 1) % this.items.length;
+				this.selectedI = (this.selectedI + 1) % this.items.length;
 				break;
 			case Keys.Left:
 				if (it.lrHandler) {
@@ -125,11 +131,12 @@ class SimpleAssMenu {
 }
 
 class TitleProgress {
-	osd = mpv.createASS(null)
+	osd = mpv.createASS()
 
 	constructor() {
 		this.update();
 	}
+	destroy = () => this.osd.remove();
 	update() {
 		const title = mp.get_property('media-title');
 		const pos = mp.get_property_number('time-pos');
@@ -139,9 +146,6 @@ class TitleProgress {
 		const posPercent = Math.round(mp.get_property_number('percent-pos') * 100) / 100;
 		this.osd.data = `{\\an8}{\\fs32}${title}\n{\\an8}{\\fs24}${posStr}/${durationStr} - ${posPercent}%`;
 		this.osd.update();
-	}
-	destroy() {
-		this.osd.remove();
 	}
 }
 
@@ -202,7 +206,7 @@ namespace MainMenu {
 		'lavfi=graph=%19%pan=1c|c0=1*c0+1*c1': 'Mono',
 	};
 
-	export const MENU: MenuItem[] = [
+	export const MENU: MenuItemish[] = [
 		{
 			title: 'Chapter',
 			value: () => {
@@ -224,6 +228,16 @@ namespace MainMenu {
 			},
 		},
 		{
+			title: 'Fullscreen',
+			value: () => mp.get_property('fullscreen'),
+			pressHandler: () => mp.set_property('fullscreen',
+					mp.get_property('fullscreen') === 'yes' ? 'no' : 'yes'),
+			lrHandler: (_dir, it) => {
+				it.pressHandler(it);
+			},
+		},
+		'separator',
+		{
 			title: 'Audio Track',
 			value: () => trackStr('audio'),
 			// pressHandler: () => {}, // TODO: show selection menu
@@ -235,15 +249,7 @@ namespace MainMenu {
 			// pressHandler: () => {}, // TODO: show selection menu
 			lrHandler: dir => cycleTrack('sub', dir),
 		},
-		{
-			title: 'Fullscreen',
-			value: () => mp.get_property('fullscreen'),
-			pressHandler: () => mp.set_property('fullscreen',
-					mp.get_property('fullscreen') === 'yes' ? 'no' : 'yes'),
-			lrHandler: (_dir, it) => {
-				it.pressHandler(it);
-			},
-		},
+		'separator',
 		{
 			title: 'Audio Delay',
 			value: () => Math.round(mp.get_property('audio-delay') * 1000) + 'ms',
@@ -258,6 +264,7 @@ namespace MainMenu {
 			lrHandler: dir => mp.set_property('sub-delay',
 					mp.get_property_number('sub-delay') + dir * 0.025),
 		},
+		'separator',
 		{
 			title: 'Audio Filter',
 			value: () => AUDIO_FILTERS[mp.get_property('af')] || '?',
@@ -270,6 +277,7 @@ namespace MainMenu {
 						: afKeys[(afIdx + dir + afKeys.length) % afKeys.length]);
 			},
 		},
+		'separator',
 		{
 			title: 'Subtitle Scale',
 			value: () => Math.round(mp.get_property('sub-scale') * 100) / 100,
@@ -288,6 +296,7 @@ namespace MainMenu {
 				mp.set_property('sub-pos', util.clamp(newVal, 0, 150));
 			},
 		},
+		'separator',
 		{
 			title: 'Save Settings',
 			pressHandler: saveProps,
@@ -296,6 +305,7 @@ namespace MainMenu {
 			title: 'Load Settings',
 			pressHandler: loadProps,
 		},
+		'separator',
 		{
 			title: 'Save Position & Quit',
 			pressHandler: () => mp.command('quit-watch-later'),
