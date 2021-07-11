@@ -1,7 +1,6 @@
 declare const mp: any;
 
 // TODO:
-// - Mono sound
 // - Prettier menu
 // - Audio normalization
 // - Settings autoload
@@ -71,7 +70,7 @@ class SimpleAssMenu {
 		this.osd.update();
 	}
 	getStr() {
-		return this.items.map((it, i) => {
+		return '\\N\\N\\N' + this.items.map((it, i) => {
 			let str = it.title;
 			if (it.value !== undefined) {
 				if (typeof it.value === 'function') {
@@ -86,7 +85,7 @@ class SimpleAssMenu {
 			if (it.lrHandler) {
 				str = '[<] ' + str + ' [>]';
 			}
-			return '{\\an4}{\\fs26}{\\bord1}' + (this.selectedI === i ? '{\\b1}' : '') + str;
+			return '{\\an7}{\\fs22}{\\bord1}' + (this.selectedI === i ? '{\\b1}' : '') + str;
 		}).join('\n');
 	}
 	key(key: Keys) {
@@ -143,7 +142,7 @@ class TitleProgress {
 
 const PROPS_FILE = '~~/tv-osc.settings.json';
 const SAVED_PROPS = [
-	'fullscreen',
+	'fullscreen', 'af',
 	'audio', 'sub',
 	'audio-delay', 'sub-delay',
 	'sub-scale', 'sub-pos',
@@ -189,6 +188,11 @@ const cycleTrack = (type: string, dir: number) => {
 	const current = currentStr === 'no' ? 0 : parseInt(currentStr);
 	const next = (current + count + 1 + dir) % (count + 1);
 	mp.set_property(type, next === 0 ? 'no' : next);
+};
+
+const AUDIO_FILTERS = {
+	'': 'None',
+	'lavfi=graph=%19%pan=1c|c0=1*c0+1*c1': 'Mono',
 };
 
 class Overlay {
@@ -248,6 +252,18 @@ class Overlay {
 			pressHandler: () => mp.set_property('sub-delay', 0),
 			lrHandler: dir => mp.set_property('sub-delay',
 					mp.get_property_number('sub-delay') + dir * 0.025),
+		},
+		{
+			title: 'Audio Filter',
+			value: () => AUDIO_FILTERS[mp.get_property('af')] || '?',
+			pressHandler: () => mp.set_property('af', ''),
+			lrHandler: dir => {
+				const af = mp.get_property('af');
+				const afKeys = Object.keys(AUDIO_FILTERS);
+				const afIdx = afKeys.indexOf(af);
+				mp.set_property('af', afIdx === -1 ? ''
+						: afKeys[(afIdx + dir + afKeys.length) % afKeys.length]);
+			},
 		},
 		{
 			title: 'Subtitle Scale',
