@@ -195,111 +195,113 @@ const AUDIO_FILTERS = {
 	'lavfi=graph=%19%pan=1c|c0=1*c0+1*c1': 'Mono',
 };
 
+const MAIN_MENU: MenuItem[] = [
+	{
+		title: 'Chapter',
+		value: () => {
+			const chapters: MpvChapter[] = JSON.parse(mp.get_property('chapter-list'));
+			if (chapters.length > 0) {
+				const chapterI = mp.get_property_number('chapter');
+				return `${chapterI + 1}/${chapters.length}`;
+			} else {
+				return 'N/A';
+			}
+		},
+		lrHandler: dir => {
+			const chapters: MpvChapter[] = JSON.parse(mp.get_property('chapter-list'));
+			if (chapters.length > 0) {
+				const chapterI = mp.get_property_number('chapter');
+				const newChapter = clamp(chapterI + dir, 0, chapters.length - 1);
+				mp.set_property('chapter', newChapter);
+			}
+		},
+	},
+	{
+		title: 'Audio Track',
+		value: () => trackStr('audio'),
+		// pressHandler: () => {}, // TODO: show selection menu
+		lrHandler: dir => cycleTrack('audio', dir),
+	},
+	{
+		title: 'Subtitle Track',
+		value: () => trackStr('sub'),
+		// pressHandler: () => {}, // TODO: show selection menu
+		lrHandler: dir => cycleTrack('sub', dir),
+	},
+	{
+		title: 'Fullscreen',
+		value: () => mp.get_property('fullscreen'),
+		pressHandler: () => mp.set_property('fullscreen',
+				mp.get_property('fullscreen') === 'yes' ? 'no' : 'yes'),
+		lrHandler: (_dir, it) => {
+			it.pressHandler(it);
+		},
+	},
+	{
+		title: 'Audio Delay',
+		value: () => Math.round(mp.get_property('audio-delay') * 1000) + 'ms',
+		pressHandler: () => mp.set_property('audio-delay', 0),
+		lrHandler: dir => mp.set_property('audio-delay',
+				mp.get_property_number('audio-delay') + dir * 0.025),
+	},
+	{
+		title: 'Subtitle Delay',
+		value: () => Math.round(mp.get_property('sub-delay') * 1000) + 'ms',
+		pressHandler: () => mp.set_property('sub-delay', 0),
+		lrHandler: dir => mp.set_property('sub-delay',
+				mp.get_property_number('sub-delay') + dir * 0.025),
+	},
+	{
+		title: 'Audio Filter',
+		value: () => AUDIO_FILTERS[mp.get_property('af')] || '?',
+		pressHandler: () => mp.set_property('af', ''),
+		lrHandler: dir => {
+			const af = mp.get_property('af');
+			const afKeys = Object.keys(AUDIO_FILTERS);
+			const afIdx = afKeys.indexOf(af);
+			mp.set_property('af', afIdx === -1 ? ''
+					: afKeys[(afIdx + dir + afKeys.length) % afKeys.length]);
+		},
+	},
+	{
+		title: 'Subtitle Scale',
+		value: () => Math.round(mp.get_property('sub-scale') * 100) / 100,
+		pressHandler: () => mp.set_property('sub-scale', 1),
+		lrHandler: dir => {
+			const newVal = mp.get_property_number('sub-scale') + dir * 0.05;
+			mp.set_property('sub-scale', clamp(newVal, 0.05, 5));
+		},
+	},
+	{
+		title: 'Subtitle Position',
+		value: () => mp.get_property('sub-pos'),
+		pressHandler: () => mp.set_property('sub-pos', 100),
+		lrHandler: dir => {
+			const newVal = mp.get_property_number('sub-pos') + dir * 5;
+			mp.set_property('sub-pos', clamp(newVal, 0, 150));
+		},
+	},
+	{
+		title: 'Save Settings',
+		pressHandler: saveProps,
+	},
+	{
+		title: 'Load Settings',
+		pressHandler: loadProps,
+	},
+	{
+		title: 'Save Position & Quit',
+		pressHandler: () => mp.command('quit-watch-later'),
+	},
+	{
+		title: 'Quit',
+		pressHandler: () => mp.command('quit'),
+	},
+];
+
 class Overlay {
 	titleProgress = new TitleProgress()
-	menu = new SimpleAssMenu([
-		{
-			title: 'Chapter',
-			value: () => {
-				const chapters: MpvChapter[] = JSON.parse(mp.get_property('chapter-list'));
-				if (chapters.length > 0) {
-					const chapterI = mp.get_property_number('chapter');
-					return `${chapterI + 1}/${chapters.length}`;
-				} else {
-					return 'N/A';
-				}
-			},
-			lrHandler: dir => {
-				const chapters: MpvChapter[] = JSON.parse(mp.get_property('chapter-list'));
-				if (chapters.length > 0) {
-					const chapterI = mp.get_property_number('chapter');
-					const newChapter = clamp(chapterI + dir, 0, chapters.length - 1);
-					mp.set_property('chapter', newChapter);
-				}
-			},
-		},
-		{
-			title: 'Audio Track',
-			value: () => trackStr('audio'),
-			// pressHandler: () => {}, // TODO: show selection menu
-			lrHandler: dir => cycleTrack('audio', dir),
-		},
-		{
-			title: 'Subtitle Track',
-			value: () => trackStr('sub'),
-			// pressHandler: () => {}, // TODO: show selection menu
-			lrHandler: dir => cycleTrack('sub', dir),
-		},
-		{
-			title: 'Fullscreen',
-			value: () => mp.get_property('fullscreen'),
-			pressHandler: () => mp.set_property('fullscreen',
-					mp.get_property('fullscreen') === 'yes' ? 'no' : 'yes'),
-			lrHandler: (_dir, it) => {
-				it.pressHandler(it);
-			},
-		},
-		{
-			title: 'Audio Delay',
-			value: () => Math.round(mp.get_property('audio-delay') * 1000) + 'ms',
-			pressHandler: () => mp.set_property('audio-delay', 0),
-			lrHandler: dir => mp.set_property('audio-delay',
-					mp.get_property_number('audio-delay') + dir * 0.025),
-		},
-		{
-			title: 'Subtitle Delay',
-			value: () => Math.round(mp.get_property('sub-delay') * 1000) + 'ms',
-			pressHandler: () => mp.set_property('sub-delay', 0),
-			lrHandler: dir => mp.set_property('sub-delay',
-					mp.get_property_number('sub-delay') + dir * 0.025),
-		},
-		{
-			title: 'Audio Filter',
-			value: () => AUDIO_FILTERS[mp.get_property('af')] || '?',
-			pressHandler: () => mp.set_property('af', ''),
-			lrHandler: dir => {
-				const af = mp.get_property('af');
-				const afKeys = Object.keys(AUDIO_FILTERS);
-				const afIdx = afKeys.indexOf(af);
-				mp.set_property('af', afIdx === -1 ? ''
-						: afKeys[(afIdx + dir + afKeys.length) % afKeys.length]);
-			},
-		},
-		{
-			title: 'Subtitle Scale',
-			value: () => Math.round(mp.get_property('sub-scale') * 100) / 100,
-			pressHandler: () => mp.set_property('sub-scale', 1),
-			lrHandler: dir => {
-				const newVal = mp.get_property_number('sub-scale') + dir * 0.05;
-				mp.set_property('sub-scale', clamp(newVal, 0.05, 5));
-			},
-		},
-		{
-			title: 'Subtitle Position',
-			value: () => mp.get_property('sub-pos'),
-			pressHandler: () => mp.set_property('sub-pos', 100),
-			lrHandler: dir => {
-				const newVal = mp.get_property_number('sub-pos') + dir * 5;
-				mp.set_property('sub-pos', clamp(newVal, 0, 150));
-			},
-		},
-		{
-			title: 'Save Settings',
-			pressHandler: saveProps,
-		},
-		{
-			title: 'Load Settings',
-			pressHandler: loadProps,
-		},
-		{
-			title: 'Save Position & Quit',
-			pressHandler: () => mp.command('quit-watch-later'),
-		},
-		{
-			title: 'Quit',
-			pressHandler: () => mp.command('quit'),
-		},
-	])
+	menu = new SimpleAssMenu(MAIN_MENU)
 
 	destroy() {
 		this.titleProgress.destroy();
