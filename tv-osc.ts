@@ -1,10 +1,8 @@
 declare const mp: any;
 
 // TODO:
-// - Audio normalization
 // - Settings autoload
 // - More flexible settings save/load menu
-// - Anime4K shader selection
 // - Show progress on pause: mp.observe_property('pause', 'bool', ...);
 
 enum Keys { Up, Down, Left, Right, Enter }
@@ -48,6 +46,7 @@ const util = {
 		}
 		return str;
 	},
+	objectValues: (obj: {}): any[] => Object.keys(obj).map(k => obj[k]),
 };
 
 interface MenuItem {
@@ -151,17 +150,34 @@ class TitleProgress {
 
 namespace MainMenu {
 	const PROPS_FILE = '~~/tv-osc.settings.json';
+	const CONF_FILE = '~~/script-opts/tv-osc.conf.json'
+
+	interface Config {
+		filters?: {
+			audio?: {[name: string]: string}
+			shaders?: {[name: string]: string}
+			// TODO: video?: {[name: string]: string}
+		}
+	}
+
+	let config: Config = {};
+	try {
+		config = JSON.parse(mp.utils.read_file(CONF_FILE));
+	} catch {
+		mp.msg.info(`No config at '${CONF_FILE}'`);
+	}
 
 	const SAVED_PROPS = [
-		'fullscreen', 'af',
+		'fullscreen',
 		'audio', 'sub',
 		'audio-delay', 'sub-delay',
 		'sub-scale', 'sub-pos',
+		'af', 'glsl-shaders',
 	];
 
 	const saveProps = () => {
 		const props = SAVED_PROPS.reduce((acc, prop) => {
-			acc[prop] = mp.get_property(prop);
+			acc[prop] = mp.get_property_native(prop);
 			return acc;
 		}, {});
 		mp.utils.write_file('file://' + PROPS_FILE, JSON.stringify(props));
@@ -172,7 +188,7 @@ namespace MainMenu {
 		try {
 			const props = JSON.parse(mp.utils.read_file(PROPS_FILE));
 			for (let prop in props) {
-				mp.set_property(prop, props[prop]);
+				mp.set_property_native(prop, props[prop]);
 			}
 			mp.osd_message('Loaded');
 		} catch {
@@ -201,9 +217,42 @@ namespace MainMenu {
 		mp.set_property(type, next === 0 ? 'no' : next);
 	};
 
-	const AUDIO_FILTERS = {
-		'': 'None',
-		'lavfi=graph=%19%pan=1c|c0=1*c0+1*c1': 'Mono',
+	// NOTE: This state-management is a bit flimsy and won't detect external changes.
+	//       The reason this is used is because the value set with mp.set_property
+	//       won't always result in getting the same value back with mp.get_property
+	//       when dealing with filters. mp.get_property_native could be used, but
+	//       then it'd also require a cache for the actual values to match against,
+	//       or for the user to put the native values in config, which is undesired.
+	// TODO: Figure out how to detect external changes, or even just loading settings.
+	type FilterState = {index: number, setValue?: any};
+	const filterStates: {[k: string]: FilterState} = {
+		'af': {index: 0, setValue: null},
+		'glsl-shaders': {index: 0, setValue: null}
+	};
+	const FILTER_KEYS = {
+		'af': 'audio',
+		'glsl-shaders': 'shaders',
+	};
+	const filterPresetKeys = (type: string) => {
+		const presetKeys = Object.keys(config.filters?.[FILTER_KEYS[type]] || {});
+		presetKeys.splice(0, 0, presetKeys.length === 0 ? 'None (N/A)' : 'None')
+		return presetKeys;
+	};
+	const filterStr = (type: string) => {
+		const presets = config.filters?.[FILTER_KEYS[type]] || {};
+		const presetName = filterPresetKeys(type)[filterStates[type].index];
+		const isSet = filterStates[type].setValue === presets[presetName];
+		return `${presetName} (${isSet ? 'Set' : 'Not Set'})`;
+	};
+	const cycleFilter = (type: string, dir: number) => {
+		const count = filterPresetKeys(type).length;
+		filterStates[type].index = (filterStates[type].index + count + dir) % count;
+	};
+	const applyFilter = (type: string) => {
+		const presets = config.filters?.[FILTER_KEYS[type]] || {};
+		const presetName = filterPresetKeys(type)[filterStates[type].index];
+		mp.set_property(type, presets[presetName] || '');
+		filterStates[type].setValue = presets[presetName];
 	};
 
 	export const MENU: MenuItemish[] = [
@@ -266,16 +315,16 @@ namespace MainMenu {
 		},
 		'separator',
 		{
+			title: 'Shader',
+			value: () => filterStr('glsl-shaders'),
+			pressHandler: () => applyFilter('glsl-shaders'),
+			lrHandler: dir => cycleFilter('glsl-shaders', dir),
+		},
+		{
 			title: 'Audio Filter',
-			value: () => AUDIO_FILTERS[mp.get_property('af')] || '?',
-			pressHandler: () => mp.set_property('af', ''),
-			lrHandler: dir => {
-				const af = mp.get_property('af');
-				const afKeys = Object.keys(AUDIO_FILTERS);
-				const afIdx = afKeys.indexOf(af);
-				mp.set_property('af', afIdx === -1 ? ''
-						: afKeys[(afIdx + dir + afKeys.length) % afKeys.length]);
-			},
+			value: () => filterStr('af'),
+			pressHandler: () => applyFilter('af'),
+			lrHandler: dir => cycleFilter('af', dir),
 		},
 		'separator',
 		{
