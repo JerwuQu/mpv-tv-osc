@@ -4,7 +4,27 @@ declare const mp: any;
 // - More flexible settings save/load menu
 // - Show progress on pause: mp.observe_property('pause', 'bool', ...);
 
+const PROPS_FILE = '~~/tv-osc.settings.json';
+const CONF_FILE = '~~/script-opts/tv-osc.conf.json'
+
 enum Keys { Up, Down, Left, Right, Enter }
+
+interface Config {
+	filters?: {
+		audio?: {[name: string]: string}
+		shaders?: {[name: string]: string}
+		// TODO: video?: {[name: string]: string}
+	}
+}
+
+let config: Config = {};
+const loadConfig = () => {
+	try {
+		config = JSON.parse(mp.utils.read_file(CONF_FILE));
+	} catch {
+		mp.msg.info(`No config at '${CONF_FILE}'`);
+	}
+};
 
 namespace mpv {
 	export interface OsdOverlay {
@@ -47,6 +67,47 @@ const util = {
 	},
 	objectValues: (obj: {}): any[] => Object.keys(obj).map(k => obj[k]),
 };
+
+namespace Settings {
+	export let autoload = false;
+
+	const SAVED_PROPS = [
+		'fullscreen',
+		'audio', 'sub',
+		'audio-delay', 'sub-delay',
+		'sub-scale', 'sub-pos',
+		'af', 'glsl-shaders',
+	];
+
+	export const save = () => {
+		const props = {autoload};
+		for (let prop of SAVED_PROPS) {
+			props[prop] = mp.get_property_native(prop);
+		}
+		mp.utils.write_file('file://' + PROPS_FILE, JSON.stringify(props));
+		mp.osd_message('tv-osc settings saved');
+	};
+
+	export const load = (autoloaded: boolean) => {
+		try {
+			const props = JSON.parse(mp.utils.read_file(PROPS_FILE));
+			autoload = props['autoload'] || false;
+			if (autoloaded && !autoload) {
+				return;
+			}
+			for (let prop of SAVED_PROPS) {
+				if (props[prop]) {
+					mp.set_property_native(prop, props[prop]);
+				}
+			}
+			mp.osd_message('tv-osc settings loaded');
+		} catch {
+			if (!autoloaded) {
+				mp.osd_message('File load failed');
+			}
+		}
+	};
+}
 
 interface MenuItem {
 	title: string
@@ -148,62 +209,6 @@ class TitleProgress {
 }
 
 namespace MainMenu {
-	const PROPS_FILE = '~~/tv-osc.settings.json';
-	const CONF_FILE = '~~/script-opts/tv-osc.conf.json'
-
-	interface Config {
-		filters?: {
-			audio?: {[name: string]: string}
-			shaders?: {[name: string]: string}
-			// TODO: video?: {[name: string]: string}
-		}
-	}
-
-	let config: Config = {};
-	export const loadConfig = () => {
-		try {
-			config = JSON.parse(mp.utils.read_file(CONF_FILE));
-		} catch {
-			mp.msg.info(`No config at '${CONF_FILE}'`);
-		}
-	};
-
-	let autoloadSettings = false;
-	const SAVED_PROPS = [
-		'fullscreen',
-		'audio', 'sub',
-		'audio-delay', 'sub-delay',
-		'sub-scale', 'sub-pos',
-		'af', 'glsl-shaders',
-	];
-	const saveSettings = () => {
-		const props = {autoload: autoloadSettings};
-		for (let prop of SAVED_PROPS) {
-			props[prop] = mp.get_property_native(prop);
-		}
-		mp.utils.write_file('file://' + PROPS_FILE, JSON.stringify(props));
-		mp.osd_message('tv-osc settings saved');
-	};
-	export const loadSettings = (autoloaded: boolean) => {
-		try {
-			const props = JSON.parse(mp.utils.read_file(PROPS_FILE));
-			autoloadSettings = props['autoload'] || false;
-			if (autoloaded && !autoloadSettings) {
-				return;
-			}
-			for (let prop of SAVED_PROPS) {
-				if (props[prop]) {
-					mp.set_property_native(prop, props[prop]);
-				}
-			}
-			mp.osd_message('tv-osc settings loaded');
-		} catch {
-			if (!autoloaded) {
-				mp.osd_message('File load failed');
-			}
-		}
-	};
-
 	const trackStr = (type: string) => {
 		const tracks: mpv.Track[] = JSON.parse(mp.get_property('track-list'));
 		const title = mp.get_property(`current-tracks/${type}/title`);
@@ -356,16 +361,16 @@ namespace MainMenu {
 		'separator',
 		{
 			title: 'Autoload Settings',
-			value: () => autoloadSettings ? 'yes' : 'no',
-			lrHandler: () => autoloadSettings = !autoloadSettings,
+			value: () => Settings.autoload ? 'yes' : 'no',
+			lrHandler: () => Settings.autoload = !Settings.autoload,
 		},
 		{
 			title: 'Save Settings',
-			pressHandler: saveSettings,
+			pressHandler: Settings.save,
 		},
 		{
 			title: 'Load Settings',
-			pressHandler: () => loadSettings(false),
+			pressHandler: () => Settings.load(false),
 		},
 		'separator',
 		{
@@ -414,13 +419,12 @@ const closeOverlay = () => {
 	overlay = null;
 };
 
-MainMenu.loadConfig();
-
-const autoloadSettings = () => {
-	mp.unregister_event(autoloadSettings); // Only autoload once
-	MainMenu.loadSettings(true);
+const init = () => {
+	mp.unregister_event(init);
+	loadConfig();
+	Settings.load(true);
 };
-mp.register_event('file-loaded', autoloadSettings);
+mp.register_event('file-loaded', init);
 
 mp.add_key_binding('alt+u', 'tv-osc-toggle', () => {
 	if (overlay) {
