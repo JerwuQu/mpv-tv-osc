@@ -4,7 +4,7 @@ declare const mp: any;
 // - More flexible settings save/load menu
 // - Show progress on pause: mp.observe_property('pause', 'bool', ...);
 
-enum Keys { Up, Down, Left, Right, Enter }
+const enum Keys { Up, Down, Left, Right, Enter }
 
 interface Config {
 	filters?: {
