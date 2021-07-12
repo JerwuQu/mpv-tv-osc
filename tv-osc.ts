@@ -1,7 +1,6 @@
 declare const mp: any;
 
 // TODO:
-// - Settings autoload
 // - More flexible settings save/load menu
 // - Show progress on pause: mp.observe_property('pause', 'bool', ...);
 
@@ -161,12 +160,15 @@ namespace MainMenu {
 	}
 
 	let config: Config = {};
-	try {
-		config = JSON.parse(mp.utils.read_file(CONF_FILE));
-	} catch {
-		mp.msg.info(`No config at '${CONF_FILE}'`);
-	}
+	export const loadConfig = () => {
+		try {
+			config = JSON.parse(mp.utils.read_file(CONF_FILE));
+		} catch {
+			mp.msg.info(`No config at '${CONF_FILE}'`);
+		}
+	};
 
+	let autoloadSettings = false;
 	const SAVED_PROPS = [
 		'fullscreen',
 		'audio', 'sub',
@@ -174,25 +176,31 @@ namespace MainMenu {
 		'sub-scale', 'sub-pos',
 		'af', 'glsl-shaders',
 	];
-
-	const saveProps = () => {
-		const props = SAVED_PROPS.reduce((acc, prop) => {
-			acc[prop] = mp.get_property_native(prop);
-			return acc;
-		}, {});
+	const saveSettings = () => {
+		const props = {autoload: autoloadSettings};
+		for (let prop of SAVED_PROPS) {
+			props[prop] = mp.get_property_native(prop);
+		}
 		mp.utils.write_file('file://' + PROPS_FILE, JSON.stringify(props));
-		mp.osd_message('Saved');
+		mp.osd_message('tv-osc settings saved');
 	};
-
-	const loadProps = () => {
+	export const loadSettings = (autoloaded: boolean) => {
 		try {
 			const props = JSON.parse(mp.utils.read_file(PROPS_FILE));
-			for (let prop in props) {
-				mp.set_property_native(prop, props[prop]);
+			autoloadSettings = props['autoload'] || false;
+			if (autoloaded && !autoloadSettings) {
+				return;
 			}
-			mp.osd_message('Loaded');
+			for (let prop of SAVED_PROPS) {
+				if (props[prop]) {
+					mp.set_property_native(prop, props[prop]);
+				}
+			}
+			mp.osd_message('tv-osc settings loaded');
 		} catch {
-			mp.osd_message('File load failed');
+			if (!autoloaded) {
+				mp.osd_message('File load failed');
+			}
 		}
 	};
 
@@ -347,12 +355,17 @@ namespace MainMenu {
 		},
 		'separator',
 		{
+			title: 'Autoload Settings',
+			value: () => autoloadSettings ? 'yes' : 'no',
+			lrHandler: () => autoloadSettings = !autoloadSettings,
+		},
+		{
 			title: 'Save Settings',
-			pressHandler: saveProps,
+			pressHandler: saveSettings,
 		},
 		{
 			title: 'Load Settings',
-			pressHandler: loadProps,
+			pressHandler: () => loadSettings(false),
 		},
 		'separator',
 		{
@@ -400,6 +413,14 @@ const closeOverlay = () => {
 	overlay.destroy();
 	overlay = null;
 };
+
+MainMenu.loadConfig();
+
+const autoloadSettings = () => {
+	mp.unregister_event(autoloadSettings); // Only autoload once
+	MainMenu.loadSettings(true);
+};
+mp.register_event('file-loaded', autoloadSettings);
 
 mp.add_key_binding('alt+u', 'tv-osc-toggle', () => {
 	if (overlay) {
