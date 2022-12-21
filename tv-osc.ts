@@ -6,24 +6,6 @@ declare const mp: any;
 
 const enum Keys { Up, Down, Left, Right, Enter }
 
-interface Config {
-	filters?: {
-		audio?: {[name: string]: string}
-		shaders?: {[name: string]: string}
-		// TODO: video?: {[name: string]: string}
-	}
-}
-
-let config: Config = {};
-const loadConfig = () => {
-	const CONF_FILE = '~~/script-opts/tv-osc.conf.json';
-	try {
-		config = JSON.parse(mp.utils.read_file(CONF_FILE));
-	} catch {
-		mp.msg.info(`No config at '${CONF_FILE}'`);
-	}
-};
-
 namespace mpv {
 	export interface OsdOverlay {
 		data: string
@@ -63,7 +45,6 @@ const util = {
 		}
 		return str;
 	},
-	objectValues: (obj: {}): any[] => Object.keys(obj).map(k => obj[k]),
 };
 
 namespace Settings {
@@ -76,11 +57,10 @@ namespace Settings {
 		'audio', 'sub',
 		'audio-delay', 'sub-delay',
 		'sub-scale', 'sub-pos',
-		'af', 'glsl-shaders',
 	];
 
 	export const save = () => {
-		const props = {autoload};
+		const props: any = {autoload};
 		for (let prop of SAVED_PROPS) {
 			props[prop] = mp.get_property_native(prop);
 		}
@@ -230,44 +210,6 @@ namespace MainMenu {
 		mp.set_property(type, next === 0 ? 'no' : next);
 	};
 
-	// NOTE: This state-management is a bit flimsy and won't detect external changes.
-	//       The reason this is used is because the value set with mp.set_property
-	//       won't always result in getting the same value back with mp.get_property
-	//       when dealing with filters. mp.get_property_native could be used, but
-	//       then it'd also require a cache for the actual values to match against,
-	//       or for the user to put the native values in config, which is undesired.
-	// TODO: Figure out how to detect external changes, or even just loading settings.
-	type FilterState = {index: number, setValue?: any};
-	const filterStates: {[k: string]: FilterState} = {
-		'af': {index: 0, setValue: null},
-		'glsl-shaders': {index: 0, setValue: null}
-	};
-	const FILTER_KEYS = {
-		'af': 'audio',
-		'glsl-shaders': 'shaders',
-	};
-	const filterPresetKeys = (type: string) => {
-		const presetKeys = Object.keys(config.filters?.[FILTER_KEYS[type]] || {});
-		presetKeys.splice(0, 0, presetKeys.length === 0 ? 'None (N/A)' : 'None')
-		return presetKeys;
-	};
-	const filterStr = (type: string) => {
-		const presets = config.filters?.[FILTER_KEYS[type]] || {};
-		const presetName = filterPresetKeys(type)[filterStates[type].index];
-		const isSet = filterStates[type].setValue === presets[presetName];
-		return `${presetName} (${isSet ? 'Set' : 'Not Set'})`;
-	};
-	const cycleFilter = (type: string, dir: number) => {
-		const count = filterPresetKeys(type).length;
-		filterStates[type].index = (filterStates[type].index + count + dir) % count;
-	};
-	const applyFilter = (type: string) => {
-		const presets = config.filters?.[FILTER_KEYS[type]] || {};
-		const presetName = filterPresetKeys(type)[filterStates[type].index];
-		mp.set_property(type, presets[presetName] || '');
-		filterStates[type].setValue = presets[presetName];
-	};
-
 	export const MENU: MenuItemish[] = [
 		{
 			title: 'Chapter',
@@ -295,7 +237,7 @@ namespace MainMenu {
 			pressHandler: () => mp.set_property('fullscreen',
 					mp.get_property('fullscreen') === 'yes' ? 'no' : 'yes'),
 			lrHandler: (_dir, it) => {
-				it.pressHandler(it);
+				it.pressHandler!!(it);
 			},
 		},
 		'separator',
@@ -325,19 +267,6 @@ namespace MainMenu {
 			pressHandler: () => mp.set_property('sub-delay', 0),
 			lrHandler: dir => mp.set_property('sub-delay',
 					mp.get_property_number('sub-delay') + dir * 0.025),
-		},
-		'separator',
-		{
-			title: 'Shader',
-			value: () => filterStr('glsl-shaders'),
-			pressHandler: () => applyFilter('glsl-shaders'),
-			lrHandler: dir => cycleFilter('glsl-shaders', dir),
-		},
-		{
-			title: 'Audio Filter',
-			value: () => filterStr('af'),
-			pressHandler: () => applyFilter('af'),
-			lrHandler: dir => cycleFilter('af', dir),
 		},
 		'separator',
 		{
@@ -388,57 +317,39 @@ class Overlay {
 	titleProgress = new TitleProgress()
 	menu = new SimpleAssMenu(MainMenu.MENU)
 
+	constructor() {
+		mp.add_forced_key_binding('enter', 'tv-osc-enter', () => this.menu.key(Keys.Enter));
+		const flags = {repeatable: true};
+		mp.add_forced_key_binding('up', 'tv-osc-up', () => this.menu.key(Keys.Up), flags);
+		mp.add_forced_key_binding('down', 'tv-osc-down', () => this.menu.key(Keys.Down), flags);
+		mp.add_forced_key_binding('left', 'tv-osc-left', () => this.menu.key(Keys.Left), flags);
+		mp.add_forced_key_binding('right', 'tv-osc-right', () => this.menu.key(Keys.Right), flags);
+	}
 	destroy() {
+		mp.remove_key_binding('tv-osc-enter');
+		mp.remove_key_binding('tv-osc-up');
+		mp.remove_key_binding('tv-osc-down');
+		mp.remove_key_binding('tv-osc-left');
+		mp.remove_key_binding('tv-osc-right');
 		this.titleProgress.destroy();
 		this.menu.destroy();
 	}
-	key(key: Keys) {
-		this.menu.key(key);
-	}
 }
 
-let overlay: Overlay = null;
-
-const openOverlay = () => {
-	overlay = new Overlay();
-	mp.add_forced_key_binding('enter', 'tv-osc-enter', () => overlay.key(Keys.Enter));
-	const flags = {repeatable: true};
-	mp.add_forced_key_binding('up', 'tv-osc-up', () => overlay.key(Keys.Up), flags);
-	mp.add_forced_key_binding('down', 'tv-osc-down', () => overlay.key(Keys.Down), flags);
-	mp.add_forced_key_binding('left', 'tv-osc-left', () => overlay.key(Keys.Left), flags);
-	mp.add_forced_key_binding('right', 'tv-osc-right', () => overlay.key(Keys.Right), flags);
-};
-
-const closeOverlay = () => {
-	mp.remove_key_binding('tv-osc-enter');
-	mp.remove_key_binding('tv-osc-up');
-	mp.remove_key_binding('tv-osc-down');
-	mp.remove_key_binding('tv-osc-left');
-	mp.remove_key_binding('tv-osc-right');
-	overlay.destroy();
-	overlay = null;
-};
+let overlay: Overlay | null = null;
 
 const init = () => {
 	mp.unregister_event(init);
-	loadConfig();
 	Settings.load(true);
 };
 mp.register_event('file-loaded', init);
 
 mp.add_key_binding('alt+u', 'tv-osc-toggle', () => {
 	if (overlay) {
-		closeOverlay();
+		overlay.destroy();
+		overlay = null;
 	} else {
-		openOverlay();
-	}
-});
-
-mp.add_key_binding('q', 'tv-osc-back', () => {
-	if (overlay) {
-		closeOverlay();
-	} else {
-		mp.command('quit');
+		overlay = new Overlay();
 	}
 });
 
