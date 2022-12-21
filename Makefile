@@ -1,5 +1,5 @@
 tv-osc.js: tv-osc.ts
-	tsc --lib es5 --removeComments --outFile $@ $^
+	tsc --lib es5 --removeComments --strict --outFile $@ $^
 
 .PHONY: install clean
 install: tv-osc.js
