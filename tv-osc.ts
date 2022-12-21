@@ -1,51 +1,10 @@
-declare const mp: any;
-
 // TODO:
 // - More flexible settings save/load menu
 // - Show progress on pause: mp.observe_property('pause', 'bool', ...);
 
+/// <reference path="./mpv-jutil/jutil.ts" />
+
 const enum Keys { Up, Down, Left, Right, Enter }
-
-namespace mpv {
-	export interface OsdOverlay {
-		data: string
-		update(): void
-		remove(): void
-	}
-
-	export interface Track {
-		// NOTE: incomplete
-		id: string
-		type: string
-	}
-
-	export interface Chapter {
-		title: string
-		time: number
-	}
-
-	export const createASS = (): OsdOverlay => mp.create_osd_overlay('ass-events');
-}
-
-const util = {
-	clamp: (n: number, min: number, max: number) => n < min ? min : (n > max ? max : n),
-	padTwoZero: (s: string) => s.length === 1 ? ('0' + s) : s,
-	hhmmss(s: number, forceH?: boolean) {
-		const h = Math.floor(s / 3600);
-		s %= 3600;
-		const m = Math.floor(s / 60);
-		s = Math.floor(s % 60);
-		return (h > 0 || forceH ? util.padTwoZero(h + '') + ':' : '')
-				+ util.padTwoZero(m + '') + ':' + util.padTwoZero(s + '');
-	},
-	repeat(s: string, n: number): string {
-		let str = '';
-		while (n--) {
-			str += s;
-		}
-		return str;
-	},
-};
 
 namespace Settings {
 	const PROPS_FILE = '~~/tv-osc.settings.json';
@@ -100,7 +59,7 @@ type MenuItemish = MenuItem | 'separator';
 
 class SimpleAssMenu {
 	items: [number, MenuItem][]
-	osd = mpv.createASS()
+	osd = new AssDraw()
 	selectedI = 0
 
 	constructor(items: MenuItemish[]) {
@@ -116,9 +75,17 @@ class SimpleAssMenu {
 		}
 		this.update();
 	}
-	destroy = () => this.osd.remove();
+	destroy = () => this.osd.destroy();
 	update() {
-		this.osd.data = '\\N\\N\\N' + this.items.map(([seps, it], i) => {
+		this.osd.start();
+		this.osd.setOptions({
+			an: AssAlignment.TopLeft,
+			fs: 22,
+			bord: 1,
+		});
+		this.osd.text(util.repeat('\n', 5));
+		for (let i = 0; i < this.items.length; i++) {
+			const [seps, it] = this.items[i];
 			let str = it.title;
 			if (it.value !== undefined) {
 				if (typeof it.value === 'function') {
@@ -133,10 +100,16 @@ class SimpleAssMenu {
 			if (it.lrHandler) {
 				str = '[<] ' + str + ' [>]';
 			}
-			return util.repeat('{\\an7}{\\fs16}\\N', seps) + '{\\an7}{\\fs22}{\\bord1}'
-					+ (this.selectedI === i ? '{\\b1}' : '') + str;
-		}).join('\n');
-		this.osd.update();
+			this.osd.text(util.repeat('\n', seps));
+			if (this.selectedI === i) {
+				this.osd.setOptions({b: true, bord: 2});
+			}
+			this.osd.text(str + '\n');
+			if (this.selectedI === i) {
+				this.osd.setOptions({b: false, bord: 1});
+			}
+		}
+		this.osd.end();
 	}
 	key(key: Keys) {
 		if (this.items.length > 0) {
@@ -170,12 +143,12 @@ class SimpleAssMenu {
 }
 
 class TitleProgress {
-	osd = mpv.createASS()
+	osd = new AssDraw()
 
 	constructor() {
 		this.update();
 	}
-	destroy = () => this.osd.remove();
+	destroy = () => this.osd.destroy()
 	update() {
 		const title = mp.get_property('media-title');
 		const pos = mp.get_property_number('time-pos');
@@ -183,8 +156,20 @@ class TitleProgress {
 		const posStr = util.hhmmss(pos, duration >= 3600);
 		const durationStr = util.hhmmss(duration);
 		const posPercent = Math.round(mp.get_property_number('percent-pos') * 100) / 100;
-		this.osd.data = `{\\an8}{\\fs32}${title}\n{\\an8}{\\fs24}${posStr}/${durationStr} - ${posPercent}%`;
-		this.osd.update();
+		this.osd.start();
+		this.osd.setOptions({
+			an: AssAlignment.TopCenter,
+			fs: 32,
+			b: true,
+			bord: 2,
+		});
+		this.osd.text(title);
+		this.osd.setOptions({
+			fs: 24,
+			bord: 1,
+		});
+		this.osd.text(`\n${posStr}/${durationStr} - ${posPercent}%`);
+		this.osd.end();
 	}
 }
 
@@ -234,8 +219,7 @@ namespace MainMenu {
 		{
 			title: 'Fullscreen',
 			value: () => mp.get_property('fullscreen'),
-			pressHandler: () => mp.set_property('fullscreen',
-					mp.get_property('fullscreen') === 'yes' ? 'no' : 'yes'),
+			pressHandler: () => mp.set_property('fullscreen', mp.get_property('fullscreen') === 'yes' ? 'no' : 'yes'),
 			lrHandler: (_dir, it) => {
 				it.pressHandler!!(it);
 			},
@@ -258,15 +242,13 @@ namespace MainMenu {
 			title: 'Audio Delay',
 			value: () => Math.round(mp.get_property('audio-delay') * 1000) + 'ms',
 			pressHandler: () => mp.set_property('audio-delay', 0),
-			lrHandler: dir => mp.set_property('audio-delay',
-					mp.get_property_number('audio-delay') + dir * 0.025),
+			lrHandler: dir => mp.set_property('audio-delay', mp.get_property_number('audio-delay') + dir * 0.025),
 		},
 		{
 			title: 'Subtitle Delay',
 			value: () => Math.round(mp.get_property('sub-delay') * 1000) + 'ms',
 			pressHandler: () => mp.set_property('sub-delay', 0),
-			lrHandler: dir => mp.set_property('sub-delay',
-					mp.get_property_number('sub-delay') + dir * 0.025),
+			lrHandler: dir => mp.set_property('sub-delay', mp.get_property_number('sub-delay') + dir * 0.025),
 		},
 		'separator',
 		{

@@ -1,4 +1,4 @@
-tv-osc.js: tv-osc.ts
+tv-osc.js: tv-osc.ts mpv-jutil/jutil.ts
 	tsc --lib es5 --removeComments --strict --outFile $@ $^
 
 .PHONY: install clean

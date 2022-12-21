@@ -1,0 +1,3 @@
+[submodule "mpv-jutil"]
+	path = mpv-jutil
+	url = https://github.com/JerwuQu/mpv-jutil.git
