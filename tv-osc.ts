@@ -48,6 +48,28 @@ namespace Settings {
 	};
 }
 
+namespace Config {
+	const FILE = '~~/script-opts/tv-osc.conf.json';
+
+	interface Command {
+		name: string
+		cmd: string
+	}
+
+	export let commands: Command[] = [];
+
+	export const load = () => {
+		let config: any = {};
+		try {
+			config = JSON.parse(mp.utils.read_file(FILE));
+		} catch {
+			mp.msg.verbose(`No config at '${FILE}'`);
+		}
+		const cmdObj = (config?.commands || {});
+		commands = Object.keys(cmdObj).map(k => ({name: k, cmd: cmdObj[k]}));
+	}
+}
+
 interface MenuItem {
 	title: string
 	value?: string | number | ((it: MenuItem) => string | number)
@@ -195,6 +217,8 @@ namespace MainMenu {
 		mp.set_property(type, next === 0 ? 'no' : next);
 	};
 
+	let selectedCommand = 0;
+
 	export const MENU: MenuItemish[] = [
 		{
 			title: 'Chapter',
@@ -285,6 +309,29 @@ namespace MainMenu {
 		},
 		'separator',
 		{
+			title: 'Command',
+			value: () => {
+				if (Config.commands.length > 0) {
+					return `${Config.commands[selectedCommand].name} (${selectedCommand + 1}/${Config.commands.length})`;
+				} else {
+					return 'N/A';
+				}
+			},
+			pressHandler: () => {
+				if (Config.commands.length > 0) {
+					const cmd = Config.commands[selectedCommand].cmd;
+					mp.msg.info(`Running command: '${cmd}'`);
+					mp.command(cmd);
+				}
+			},
+			lrHandler: dir => {
+				if (Config.commands.length > 0) {
+					selectedCommand = (selectedCommand + dir + Config.commands.length) % Config.commands.length;
+				}
+			},
+		},
+		'separator',
+		{
 			title: 'Save Position & Quit',
 			pressHandler: () => mp.command('quit-watch-later'),
 		},
@@ -323,6 +370,7 @@ let overlay: Overlay | null = null;
 const init = () => {
 	mp.unregister_event(init);
 	Settings.load(true);
+	Config.load();
 };
 mp.register_event('file-loaded', init);
 

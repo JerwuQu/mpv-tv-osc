@@ -12,4 +12,5 @@ Run `update.sh` to install the latest release on linux. Alternatively [grab it y
 
 The menu is bound to alt+u by default but can be changed by adding `<key> script-binding tv-osc-toggle` to `<mpv config dir>/input.conf`.
 
-You can add custom filter presets by adding a `<mpv config dir>/script-opts/tv-osc.conf.json` file. There's an example [here](https://github.com/JerwuQu/mpv-tv-osc/blob/master/tv-osc.conf.json).
+You can add custom commands to be launched from the menu by adding a `<mpv config dir>/script-opts/tv-osc.conf.json` file.
+There's an example [here](https://github.com/JerwuQu/mpv-tv-osc/blob/master/tv-osc.conf.json).

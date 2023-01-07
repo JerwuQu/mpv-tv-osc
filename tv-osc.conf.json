@@ -1,0 +1,7 @@
+{
+    "commands": {
+        "Mono Audio": "af toggle \"lavfi=[pan=1c|c0=1*c0+1*c1]\"",
+        "Normalize Audio": "af toggle \"lavfi=[dynaudnorm=f=75:g=25:n=0:p=0.58]\"",
+        "Start calculator": "run calc"
+    }
+}
