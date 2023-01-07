@@ -1,7 +1,3 @@
-// TODO:
-// - More flexible settings save/load menu
-// - Show progress on pause: mp.observe_property('pause', 'bool', ...);
-
 /// <reference path="./mpv-jutil/jutil.ts" />
 
 const enum Keys { Up, Down, Left, Right, Enter }
@@ -97,7 +93,9 @@ class SimpleAssMenu {
 		}
 		this.update();
 	}
-	destroy = () => this.osd.destroy();
+	destroy() {
+		this.osd.destroy();
+	}
 	update() {
 		this.osd.start();
 		this.osd.setOptions({
@@ -105,7 +103,7 @@ class SimpleAssMenu {
 			fs: 22,
 			bord: 1,
 		});
-		this.osd.text(util.repeat('\n', 5));
+		this.osd.text(util.repeat('\n', 6));
 		for (let i = 0; i < this.items.length; i++) {
 			const [seps, it] = this.items[i];
 			let str = it.title;
@@ -170,15 +168,23 @@ class TitleProgress {
 	constructor() {
 		this.update();
 	}
-	destroy = () => this.osd.destroy()
+	destroy() {
+		this.osd.destroy();
+	}
 	update() {
-		const title = mp.get_property('media-title');
+		this.osd.start();
+
+		const posPercent = mp.get_property_number('percent-pos') / 100;
+		this.osd.setOptions({color: [255, 255, 255, 200]});
+		this.osd.rect(720 * posPercent, 0, 720 * (1 - posPercent), 5);
+		this.osd.setOptions({color: [255, 0, 0, 200]});
+		this.osd.rect(0, 0, 720 * posPercent, 5);
+
+		const title = mp.get_property('media-title') || '<unknown>';
 		const pos = mp.get_property_number('time-pos');
 		const duration = mp.get_property_number('duration');
 		const posStr = util.hhmmss(pos, duration >= 3600);
 		const durationStr = util.hhmmss(duration);
-		const posPercent = Math.round(mp.get_property_number('percent-pos') * 100) / 100;
-		this.osd.start();
 		this.osd.setOptions({
 			an: AssAlignment.TopCenter,
 			fs: 32,
@@ -190,7 +196,8 @@ class TitleProgress {
 			fs: 24,
 			bord: 1,
 		});
-		this.osd.text(`\n${posStr}/${durationStr} - ${posPercent}%`);
+		this.osd.text(`\n${posStr}/${durationStr}`);
+
 		this.osd.end();
 	}
 }
@@ -343,7 +350,6 @@ namespace MainMenu {
 }
 
 class Overlay {
-	titleProgress = new TitleProgress()
 	menu = new SimpleAssMenu(MainMenu.MENU)
 
 	constructor() {
@@ -360,12 +366,9 @@ class Overlay {
 		mp.remove_key_binding('tv-osc-down');
 		mp.remove_key_binding('tv-osc-left');
 		mp.remove_key_binding('tv-osc-right');
-		this.titleProgress.destroy();
 		this.menu.destroy();
 	}
 }
-
-let overlay: Overlay | null = null;
 
 const init = () => {
 	mp.unregister_event(init);
@@ -374,6 +377,7 @@ const init = () => {
 };
 mp.register_event('file-loaded', init);
 
+let overlay: Overlay | null = null;
 mp.add_key_binding('alt+u', 'tv-osc-toggle', () => {
 	if (overlay) {
 		overlay.destroy();
@@ -381,8 +385,29 @@ mp.add_key_binding('alt+u', 'tv-osc-toggle', () => {
 	} else {
 		overlay = new Overlay();
 	}
+	showHideTitleProgress();
 });
 
-mp.observe_property('media-title', 'string', () => overlay?.titleProgress.update());
-mp.observe_property('time-pos', 'number', () => overlay?.titleProgress.update());
+let titleProgress: TitleProgress | null = null;
+const showHideTitleProgress = () => {
+	const paused = mp.get_property_bool('pause');
+	const overlayOn = !!overlay;
+	if (paused || overlayOn) {
+		if (titleProgress) {
+			titleProgress.update()
+		} else {
+			titleProgress = new TitleProgress();
+
+			// TODO: hack because weirdness when updating OSDs on pause
+			setTimeout(() => titleProgress?.osd.overlay.update(), 100);
+		}
+	} else if (titleProgress) {
+		titleProgress.destroy()
+		titleProgress = null;
+	}
+}
+
+mp.observe_property('media-title', 'string', () => titleProgress?.update());
+mp.observe_property('time-pos', 'number', () => titleProgress?.update());
 mp.observe_property('chapter', 'number', () => overlay?.menu.update());
+mp.observe_property('pause', 'bool', showHideTitleProgress);
