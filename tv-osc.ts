@@ -172,13 +172,15 @@ class TitleProgress {
 		this.osd.destroy();
 	}
 	update() {
+		const width = 720 * mp.get_osd_size().aspect;
+
 		this.osd.start();
 
 		const posPercent = mp.get_property_number('percent-pos') / 100;
 		this.osd.setOptions({color: [255, 255, 255, 200]});
-		this.osd.rect(720 * posPercent, 0, 720 * (1 - posPercent), 5);
+		this.osd.rect(width * posPercent, 0, width * (1 - posPercent), 5);
 		this.osd.setOptions({color: [255, 0, 0, 200]});
-		this.osd.rect(0, 0, 720 * posPercent, 5);
+		this.osd.rect(0, 0, width * posPercent, 5);
 
 		const title = mp.get_property('media-title') || '<unknown>';
 		const pos = mp.get_property_number('time-pos');
